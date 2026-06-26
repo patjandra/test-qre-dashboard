@@ -1,0 +1,8 @@
+{
+  "id": "deutsch-jozsa",
+  "name": "Deutsch-Jozsa",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Decides whether a black-box Boolean function is constant or balanced in a single query. From the microsoft/qdk algorithm samples.",
+  "source": "samples/algorithms/DeutschJozsa.qs"
+}

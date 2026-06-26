@@ -1,0 +1,8 @@
+{
+  "id": "superdense-coding",
+  "name": "Superdense Coding",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Transmits two classical bits by sending a single qubit over a pre-shared Bell pair. From the microsoft/qdk algorithm samples.",
+  "source": "samples/algorithms/SuperdenseCoding.qs"
+}

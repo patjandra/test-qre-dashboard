@@ -1,0 +1,8 @@
+{
+  "id": "dynamics",
+  "name": "Quantum Dynamics",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Trotterized Hamiltonian dynamics simulation used as a fault-tolerant resource-estimation benchmark. From the microsoft/qdk estimation samples.",
+  "source": "samples/estimation/Dynamics.qs"
+}

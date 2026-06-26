@@ -1,0 +1,8 @@
+{
+  "id": "grover",
+  "name": "Grover's Search",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Grover's unstructured search amplifying a marked item over a database of size 2^n. From the microsoft/qdk algorithm samples.",
+  "source": "samples/algorithms/Grover.qs"
+}

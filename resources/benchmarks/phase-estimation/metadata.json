@@ -1,0 +1,8 @@
+{
+  "id": "phase-estimation",
+  "name": "Phase Estimation",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Estimates the eigenphase of a unitary operator, a core subroutine of many quantum algorithms. From the microsoft/qdk algorithm samples.",
+  "source": "samples/algorithms/PhaseEstimation.qs"
+}

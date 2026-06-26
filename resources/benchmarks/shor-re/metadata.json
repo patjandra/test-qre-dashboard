@@ -1,0 +1,8 @@
+{
+  "id": "shor-re",
+  "name": "Shor's Factoring (RE)",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Shor's integer-factoring circuit configured specifically for resource estimation. A large fault-tolerant benchmark. From the microsoft/qdk estimation samples.",
+  "source": "samples/estimation/ShorRE.qs"
+}

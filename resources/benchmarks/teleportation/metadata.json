@@ -1,0 +1,8 @@
+{
+  "id": "teleportation",
+  "name": "Quantum Teleportation",
+  "entry": "main.qs",
+  "lang": "qsharp",
+  "description": "Moves a quantum state between qubits using shared entanglement and classical communication. From the microsoft/qdk algorithm samples.",
+  "source": "samples/algorithms/Teleportation.qs"
+}

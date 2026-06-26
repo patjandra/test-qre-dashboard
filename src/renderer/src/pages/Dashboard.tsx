@@ -72,7 +72,14 @@ export default function Dashboard(): JSX.Element {
         )}
       </p>
 
-      <div className="card">
+      <div className="section">
+        <div className="section-head">
+          <span className="step">1</span>
+          <h2>Configure run</h2>
+          <span className="section-sub">Define the application, architecture, and error model.</span>
+        </div>
+
+        <div className="card">
         <h3>Application model</h3>
         <div className="grid-2">
           <div className="field">
@@ -205,25 +212,34 @@ export default function Dashboard(): JSX.Element {
           )}
         </div>
         {error && <div className="error-box">Estimation failed:{'\n'}{error}</div>}
+        </div>
       </div>
 
       {lastRun && (
-        <div className="card">
-          <div className="toolbar" style={{ marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Results — {lastRun.name}</h3>
+        <div className="section">
+          <div className="section-head">
+            <span className="step">2</span>
+            <h2>Results — {lastRun.name}</h2>
             <div className="spacer" />
             <button className="btn btn-sm" onClick={scrollToHistory}>
               View in Run History ↓
             </button>
           </div>
-          <MetricsPanel
-            frontier={lastRun.outputs.frontier}
-            chosenIndex={lastRun.outputs.chosenIndex}
-          />
+          <div className="card">
+            <MetricsPanel
+              frontier={lastRun.outputs.frontier}
+              chosenIndex={lastRun.outputs.chosenIndex}
+            />
+          </div>
         </div>
       )}
 
-      <div style={{ marginTop: 28 }}>
+      <div className="section">
+        <div className="section-head">
+          <span className="step">{lastRun ? 3 : 2}</span>
+          <h2>Run history</h2>
+          <span className="section-sub">Immutable record of every estimation.</span>
+        </div>
         <RunHistoryList />
       </div>
     </div>

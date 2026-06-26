@@ -42,9 +42,6 @@ export default function RunHistoryList(): JSX.Element {
   return (
     <div id="run-history">
       <div className="toolbar">
-        <h2 className="page-title" style={{ margin: 0, fontSize: 18 }}>
-          Run History
-        </h2>
         <span className="muted">{runs.length} immutable records</span>
         <div className="spacer" />
         <select value={benchFilter} onChange={(e) => setBenchFilter(e.target.value)}>

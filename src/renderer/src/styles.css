@@ -377,6 +377,45 @@ tbody tr:hover {
   font-size: 13px;
 }
 
+/* Dashboard section grouping */
+.section {
+  margin-bottom: 36px;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-head .step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  align-self: center;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.section-head .section-sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* Inline run-detail row inside the history table */
 .detail-row > td {
   background: var(--bg);

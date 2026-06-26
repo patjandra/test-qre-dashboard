@@ -27,7 +27,12 @@ function MetricChart({ metric }: { metric: ComparisonMetric }): JSX.Element {
             <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3c" />
             <XAxis dataKey="name" stroke="#9aa3b2" />
             <YAxis stroke="#9aa3b2" width={70} />
-            <Tooltip contentStyle={{ background: '#1f2430', border: '1px solid #2a2f3c' }} />
+            <Tooltip
+              contentStyle={{ background: '#1f2430', border: '1px solid #2a2f3c', borderRadius: 8 }}
+              labelStyle={{ color: '#e6e9ef' }}
+              itemStyle={{ color: '#e6e9ef' }}
+              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+            />
             <Bar dataKey="value" name={metric.name} radius={[4, 4, 0, 0]}>
               {data.map((_, i) => (
                 <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />

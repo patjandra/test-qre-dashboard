@@ -4,6 +4,8 @@ import type { Run } from '@shared/types'
 import { defaultRunName } from '@shared/naming'
 import MetricsPanel from '../components/MetricsPanel'
 import RunHistoryList from '../components/RunHistoryList'
+import NumberField from '../components/NumberField'
+import Section from '../components/Section'
 
 export default function Dashboard(): JSX.Element {
   const benchmarks = useAppStore((s) => s.benchmarks)
@@ -42,7 +44,12 @@ export default function Dashboard(): JSX.Element {
 
   async function importProgram(): Promise<void> {
     const res = await window.api.importProgram()
+    if (res.error) {
+      setError(`Upload rejected: ${res.error}`)
+      return
+    }
     if (!res.canceled && res.path) {
+      setError(null)
       setDraft({ benchmarkId: undefined, applicationPath: res.path })
     }
   }
@@ -64,21 +71,26 @@ export default function Dashboard(): JSX.Element {
     <div>
       <h1 className="page-title">Dashboard</h1>
       <p className="page-sub">
-        Configure and execute a Quantum Resource Estimator run.{' '}
+        Estimate the physical qubits and runtime a quantum program would need. Pick a
+        benchmark or import a program, set your hardware assumptions, then run.{' '}
         {engine && (
           <span className="muted">
-            Engine: {engine.active === 'python' ? `Real (qdk ${engine.qdkVersion})` : 'Mock'}
+            Engine:{' '}
+            {engine.mock
+              ? 'Demo data (synthetic)'
+              : engine.available
+                ? `Real (qdk ${engine.qdkVersion})`
+                : 'Unavailable'}
           </span>
         )}
       </p>
 
-      <div className="section">
-        <div className="section-head">
-          <span className="step">1</span>
-          <h2>Configure run</h2>
-          <span className="section-sub">Define the application, architecture, and error model.</span>
-        </div>
-
+      <Section
+        id="configure"
+        step={1}
+        title="Configure run"
+        sub="Define the application, architecture, and error model."
+      >
         <div className="card">
         <h3>Application model</h3>
         <div className="grid-2">
@@ -115,43 +127,22 @@ export default function Dashboard(): JSX.Element {
       <div className="card">
         <h3>Architecture model (GateBased)</h3>
         <div className="grid-3">
-          <div className="field">
-            <label>Physical error rate</label>
-            <input
-              type="number"
-              step="0.00001"
-              value={arch.errorRate}
-              onChange={(e) =>
-                setDraft({
-                  architectureModel: { ...arch, errorRate: Number(e.target.value) }
-                })
-              }
-            />
-          </div>
-          <div className="field">
-            <label>Gate time (ns)</label>
-            <input
-              type="number"
-              value={arch.gateTimeNs}
-              onChange={(e) =>
-                setDraft({
-                  architectureModel: { ...arch, gateTimeNs: Number(e.target.value) }
-                })
-              }
-            />
-          </div>
-          <div className="field">
-            <label>Measurement time (ns)</label>
-            <input
-              type="number"
-              value={arch.measurementTimeNs}
-              onChange={(e) =>
-                setDraft({
-                  architectureModel: { ...arch, measurementTimeNs: Number(e.target.value) }
-                })
-              }
-            />
-          </div>
+          <NumberField
+            label="Physical error rate"
+            value={arch.errorRate}
+            onChange={(n) => setDraft({ architectureModel: { ...arch, errorRate: n } })}
+            hint="e.g. 1e-4"
+          />
+          <NumberField
+            label="Gate time (ns)"
+            value={arch.gateTimeNs}
+            onChange={(n) => setDraft({ architectureModel: { ...arch, gateTimeNs: n } })}
+          />
+          <NumberField
+            label="Measurement time (ns)"
+            value={arch.measurementTimeNs}
+            onChange={(n) => setDraft({ architectureModel: { ...arch, measurementTimeNs: n } })}
+          />
         </div>
       </div>
 
@@ -181,15 +172,11 @@ export default function Dashboard(): JSX.Element {
               <option value="RoundBasedFactory">Round Based Factory</option>
             </select>
           </div>
-          <div className="field">
-            <label>Error budget (max error)</label>
-            <input
-              type="number"
-              step="0.001"
-              value={draft.errorBudget}
-              onChange={(e) => setDraft({ errorBudget: Number(e.target.value) })}
-            />
-          </div>
+          <NumberField
+            label="Error budget (max error)"
+            value={draft.errorBudget}
+            onChange={(n) => setDraft({ errorBudget: n })}
+          />
         </div>
         <div className="field" style={{ marginTop: 6 }}>
           <label>Run name (optional)</label>
@@ -213,35 +200,36 @@ export default function Dashboard(): JSX.Element {
         </div>
         {error && <div className="error-box">Estimation failed:{'\n'}{error}</div>}
         </div>
-      </div>
+      </Section>
 
       {lastRun && (
-        <div className="section">
-          <div className="section-head">
-            <span className="step">2</span>
-            <h2>Results — {lastRun.name}</h2>
-            <div className="spacer" />
+        <Section
+          id="results"
+          step={2}
+          title={`Results — ${lastRun.name}`}
+          actions={
             <button className="btn btn-sm" onClick={scrollToHistory}>
               View in Run History ↓
             </button>
-          </div>
+          }
+        >
           <div className="card">
             <MetricsPanel
               frontier={lastRun.outputs.frontier}
               chosenIndex={lastRun.outputs.chosenIndex}
             />
           </div>
-        </div>
+        </Section>
       )}
 
-      <div className="section">
-        <div className="section-head">
-          <span className="step">{lastRun ? 3 : 2}</span>
-          <h2>Run history</h2>
-          <span className="section-sub">Immutable record of every estimation.</span>
-        </div>
+      <Section
+        id="history"
+        step={lastRun ? 3 : 2}
+        title="Run history"
+        sub="Immutable record of every estimation."
+      >
         <RunHistoryList />
-      </div>
+      </Section>
     </div>
   )
 }

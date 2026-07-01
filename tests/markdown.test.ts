@@ -27,7 +27,7 @@ function makeRun(id: string, benchmarkId: string | undefined, qubits: number): R
     id,
     name: `Run ${id}`,
     timestamp: 1_700_000_000_000,
-    qreVersion: 'mock-1.0',
+    qreVersion: 'qdk-1.29.1',
     inputs: {
       benchmarkId,
       applicationPath: '/bench/main.qs',
@@ -35,7 +35,7 @@ function makeRun(id: string, benchmarkId: string | undefined, qubits: number): R
       architectureModel: { kind: 'GateBased', errorRate: 1e-4, gateTimeNs: 100, measurementTimeNs: 500 },
       errorCorrection: { qec: 'SurfaceCode', factory: 'RoundBasedFactory' },
       errorBudget: 0.01,
-      qreVersion: 'mock-1.0'
+      qreVersion: 'qdk-1.29.1'
     },
     outputs: { frontier, chosenIndex: 0 }
   }

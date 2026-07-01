@@ -1,28 +1,29 @@
 #!/usr/bin/env python3
-"""QRE worker: reads a JSON estimation config on stdin, runs the Microsoft
-Quantum Resource Estimator (qdk.qre), and prints a normalized JSON frontier on
-stdout. Non-zero exit + stderr message on failure.
+"""Persistent QRE worker.
 
-Verified against qdk 1.29.x. The estimator returns an EstimationTable that is a
-list of EstimationTableEntry objects; each entry exposes `qubits` (int),
-`runtime` (int nanoseconds), `error` (float), `factories` (dict) and
-`properties` (dict keyed by integer property ids decoded via property_name).
+Runs the Microsoft Quantum Resource Estimator (qdk.qre). Importing qdk costs
+~2.7s, so this worker is long-lived: it imports once, then serves repeated
+requests over stdin/stdout as newline-delimited JSON (NDJSON). The first run pays
+the import cost; every run after is ~0.1s.
 
-Input (stdin) JSON:
-  { "programPath": str, "lang": str, "arch": {errorRate, gateTimeNs, measurementTimeNs},
-    "qec": "SurfaceCode"|"SurfaceCodeLowMove", "factory": "RoundBasedFactory", "maxError": float }
+Protocol:
+  stdin  : one JSON request object per line
+             { "programPath": str, "lang": "qsharp",
+               "arch": {errorRate, gateTimeNs, measurementTimeNs},
+               "qec": "SurfaceCode"|"SurfaceCodeLowMove",
+               "factory": "RoundBasedFactory", "maxError": float }
+  stdout : one JSON response object per line
+             { "ok": true, "version": str, "frontier": [FrontierPoint, ...] }
+             { "ok": false, "error": str }
 
-Output (stdout) JSON:
-  { "version": str, "frontier": [ FrontierPoint, ... ] }
+stdout carries ONLY protocol responses; any library chatter is redirected to
+stderr so the NDJSON stream stays clean.
+
+Verified against qdk 1.29.x.
 """
 import json
 import sys
 from pathlib import Path
-
-
-def fail(msg: str) -> None:
-    print(msg, file=sys.stderr)
-    sys.exit(1)
 
 
 def to_ns(value) -> float:
@@ -39,55 +40,28 @@ def to_ns(value) -> float:
 
 
 def main() -> None:
-    try:
-        cfg = json.load(sys.stdin)
-    except Exception as e:  # noqa: BLE001
-        fail(f"Invalid input JSON: {e}")
-
+    # Import once. On failure, report on the protocol channel and exit non-zero.
     try:
         import importlib.metadata as md
         from qdk import qsharp
         import qdk
         from qdk.qre.application import QSharpApplication
         from qdk.qre.models import GateBased, SurfaceCode, SurfaceCodeLowMove, RoundBasedFactory
-        from qdk.qre import estimate, property_name
+        from qdk.qre import estimate, property_name, instruction_ids
+        from qdk.qre.property_keys import DISTANCE, CODE_CYCLE_TIME
     except Exception as e:  # noqa: BLE001
-        fail(f"qdk.qre is not installed or failed to import: {e}")
+        sys.stdout.write(json.dumps({"ok": False, "error": f"qdk.qre import failed: {e}"}) + "\n")
+        sys.stdout.flush()
+        sys.exit(1)
 
-    lang = cfg.get("lang", "qsharp")
-    if lang != "qsharp":
-        fail(f"This worker currently supports Q# programs only (got lang={lang}).")
+    version = md.version("qdk")
 
-    try:
-        source = Path(cfg["programPath"]).read_text(encoding="utf-8")
-        qsharp.eval(source)
-        app = QSharpApplication(qdk.code.Main)
-    except Exception as e:  # noqa: BLE001
-        fail(f"Failed to load Q# program '{cfg.get('programPath')}': {e}")
-
-    arch_cfg = cfg["arch"]
-    try:
-        arch = GateBased(
-            error_rate=arch_cfg["errorRate"],
-            gate_time=int(arch_cfg["gateTimeNs"]),
-            measurement_time=int(arch_cfg["measurementTimeNs"]),
-        )
-    except Exception as e:  # noqa: BLE001
-        fail(f"Failed to build architecture model: {e}")
+    # Keep the protocol channel pure: send responses to the real stdout, and
+    # redirect anything qdk/qsharp prints to stderr so it can't corrupt the stream.
+    protocol = sys.stdout
+    sys.stdout = sys.stderr
 
     qec_map = {"SurfaceCode": SurfaceCode, "SurfaceCodeLowMove": SurfaceCodeLowMove}
-    qec_cls = qec_map.get(cfg.get("qec"), SurfaceCode)
-    factory_cls = RoundBasedFactory  # only supported factory for now
-
-    try:
-        table = estimate(
-            app,
-            arch,
-            isa_query=qec_cls.q() * factory_cls.q(),
-            max_error=cfg["maxError"],
-        )
-    except Exception as e:  # noqa: BLE001
-        fail(f"Estimation failed: {e}")
 
     def prop_name(key):
         try:
@@ -95,35 +69,124 @@ def main() -> None:
         except Exception:  # noqa: BLE001
             return str(key)
 
-    frontier = []
-    for entry in table:
-        props = {prop_name(k): v for k, v in dict(entry.properties).items()}
+    def lattice_surgery_metrics(entry):
+        """Code distance and code-cycle time are NOT in entry.properties; they live
+        on the LATTICE_SURGERY instruction in the entry's ISA source graph (set by the
+        QEC model, e.g. qdk.qre.models.qec._surface_code). Walk the graph, find that
+        instruction, and read its DISTANCE / CODE_CYCLE_TIME properties.
 
-        # Map known properties onto our schema where available; everything else is
-        # preserved in `extra` so no QRE-provided metric is lost.
+        Returns (distance, code_cycle_time_ns) — either may be None if not found.
+        """
+        src = getattr(entry, "source", None)
+        if src is None:
+            return (None, None)
+        try:
+            ls_id = instruction_ids.LATTICE_SURGERY
+            nodes = src.nodes
+            stack = list(src.roots)
+        except Exception:  # noqa: BLE001
+            return (None, None)
+        seen = set()
+        while stack:
+            nid = stack.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            try:
+                node = nodes[nid]
+                instr = node.instruction
+            except Exception:  # noqa: BLE001
+                continue
+            if getattr(instr, "id", None) == ls_id:
+                try:
+                    return (instr.get_property(DISTANCE), instr.get_property(CODE_CYCLE_TIME))
+                except Exception:  # noqa: BLE001
+                    return (None, None)
+            stack.extend(getattr(node, "children", []) or [])
+        return (None, None)
+
+    def total_t_states(entry):
+        """Total magic (T) states, summed across the entry's T-factories. Zero for
+        Clifford-only circuits (no factories), which is correct."""
+        facs = getattr(entry, "factories", {}) or {}
+        total = 0
+        for fr in dict(facs).values():
+            total += int(getattr(fr, "states", 0) or 0)
+        return total
+
+    def build_point(entry):
+        props = {prop_name(k): v for k, v in dict(entry.properties).items()}
+        distance, code_cycle_time = lattice_surgery_metrics(entry)
+        # Logical cycle time = code-cycle time x code distance (see surface_code model:
+        # time_value = code_cycle_time * self.distance).
+        logical_cycle_time = (
+            float(code_cycle_time) * float(distance)
+            if code_cycle_time is not None and distance is not None
+            else 0.0
+        )
         point = {
             "physicalQubits": int(getattr(entry, "qubits", 0) or 0),
             "runtimeNs": to_ns(getattr(entry, "runtime", 0)),
-            "logicalCycleTimeNs": float(props.get("LOGICAL_CYCLE_TIME", 0) or 0),
-            "tStates": int(props.get("NUM_T_STATES", props.get("NUM_TSTATES", 0)) or 0),
+            "logicalCycleTimeNs": logical_cycle_time,
+            "tStates": total_t_states(entry),
             "logicalErrorRate": float(getattr(entry, "error", 0) or 0),
             "extra": {
                 str(k): (v if isinstance(v, (int, float, str)) else str(v))
                 for k, v in props.items()
             },
         }
-        if "CODE_DISTANCE" in props:
-            point["codeDistance"] = int(props["CODE_DISTANCE"])
-
-        # Summarize T-factory usage when present.
+        if distance is not None:
+            point["codeDistance"] = int(distance)
+        if code_cycle_time is not None:
+            point["extra"]["CODE_CYCLE_TIME"] = int(code_cycle_time)
         factories = getattr(entry, "factories", {}) or {}
         if factories:
             point["extra"]["NUM_FACTORIES"] = len(factories)
+        return point
 
-        frontier.append(point)
+    def handle(cfg) -> dict:
+        lang = cfg.get("lang", "qsharp")
+        if lang != "qsharp":
+            return {"ok": False, "error": f"This worker supports Q# programs only (got lang={lang})."}
 
-    version = md.version("qdk")
-    json.dump({"version": f"qdk-{version}", "frontier": frontier}, sys.stdout)
+        # Reset the interpreter so re-running the same (or a different) program in this
+        # long-lived process never collides on redefinitions.
+        qsharp.init()
+        source = Path(cfg["programPath"]).read_text(encoding="utf-8")
+        qsharp.eval(source)
+        app = QSharpApplication(qdk.code.Main)
+
+        a = cfg["arch"]
+        arch = GateBased(
+            error_rate=a["errorRate"],
+            gate_time=int(a["gateTimeNs"]),
+            measurement_time=int(a["measurementTimeNs"]),
+        )
+        qec_cls = qec_map.get(cfg.get("qec"), SurfaceCode)
+        table = estimate(
+            app,
+            arch,
+            isa_query=qec_cls.q() * RoundBasedFactory.q(),
+            max_error=cfg["maxError"],
+        )
+        return {"ok": True, "version": f"qdk-{version}", "frontier": [build_point(e) for e in table]}
+
+    # Serve requests until stdin closes.
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            cfg = json.loads(line)
+        except Exception as e:  # noqa: BLE001
+            resp = {"ok": False, "error": f"Invalid request JSON: {e}"}
+        else:
+            try:
+                resp = handle(cfg)
+            except Exception as e:  # noqa: BLE001
+                resp = {"ok": False, "error": str(e)}
+        protocol.write(json.dumps(resp) + "\n")
+        protocol.flush()
 
 
 if __name__ == "__main__":

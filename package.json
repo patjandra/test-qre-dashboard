@@ -7,12 +7,17 @@
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:mock": "QRE_MOCK=1 electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
+    "provision:python": "node scripts/provision-python.mjs",
+    "dist": "npm run build && npm run provision:python && electron-builder",
+    "dist:mac": "npm run build && npm run provision:python && electron-builder --mac",
+    "dist:win": "npm run build && npm run provision:python && electron-builder --win",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
@@ -27,6 +32,7 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -1,0 +1,53 @@
+name: Build installers
+
+# Builds the macOS .dmg and Windows .exe installers, each with an embedded
+# Python + qdk[qre] runtime. Native qdk wheels are platform-specific, so each
+# installer is built on its own OS runner.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: dist:mac
+          - os: windows-latest
+            script: dist:win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Build-time Python only used to bootstrap pip into the embedded runtime;
+      # the shipped interpreter is the relocatable one from provision-python.mjs.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: npm ci
+
+      - run: npm run typecheck && npm test
+
+      - run: npm run ${{ matrix.script }}
+        env:
+          # Avoid code-signing in CI; produce unsigned artifacts.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+          if-no-files-found: ignore

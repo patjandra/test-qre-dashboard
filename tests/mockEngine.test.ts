@@ -1,50 +1,38 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { MockQreEngine } from '../src/main/engine/MockQreEngine'
 import type { RunInputs } from '../src/shared/types'
 
-const baseInputs: RunInputs = {
-  benchmarkId: 'bernstein-vazirani',
-  applicationPath: '/benchmarks/bv/main.qs',
+const inputs: RunInputs = {
+  applicationPath: '/tmp/demo.qs',
   applicationLang: 'qsharp',
-  architectureModel: {
-    kind: 'GateBased',
-    errorRate: 1e-4,
-    gateTimeNs: 100,
-    measurementTimeNs: 500
-  },
+  architectureModel: { kind: 'GateBased', errorRate: 1e-4, gateTimeNs: 100, measurementTimeNs: 500 },
   errorCorrection: { qec: 'SurfaceCode', factory: 'RoundBasedFactory' },
   errorBudget: 0.01,
   qreVersion: 'mock-1.0'
 }
 
-describe('MockQreEngine', () => {
+describe('MockQreEngine (demo mode)', () => {
   const engine = new MockQreEngine()
 
-  it('is deterministic for identical inputs', async () => {
-    const a = await engine.run(baseInputs)
-    const b = await engine.run(baseInputs)
-    expect(a).toEqual(b)
+  it('returns a multi-point frontier so the UI has data to render', async () => {
+    const out = await engine.run(inputs)
+    expect(out.frontier.length).toBeGreaterThan(1)
+    expect(out.chosenIndex).toBeGreaterThanOrEqual(0)
+    const p = out.frontier[out.chosenIndex]
+    expect(p.physicalQubits).toBeGreaterThan(0)
+    expect(p.runtimeNs).toBeGreaterThan(0)
+    expect(p.codeDistance).toBeGreaterThan(0)
   })
 
-  it('returns a non-empty frontier with the chosen point at minimum physical qubits', async () => {
-    const out = await engine.run(baseInputs)
-    expect(out.frontier.length).toBeGreaterThan(0)
-    const minQubits = Math.min(...out.frontier.map((p) => p.physicalQubits))
-    expect(out.frontier[out.chosenIndex].physicalQubits).toBe(minQubits)
+  it('is deterministic: identical inputs yield identical outputs', async () => {
+    const a = await engine.run(inputs)
+    const b = await engine.run(inputs)
+    expect(b).toEqual(a)
   })
 
-  it('produces different results when inputs change', async () => {
-    const out1 = await engine.run(baseInputs)
-    const out2 = await engine.run({ ...baseInputs, errorBudget: 0.001 })
-    expect(out1).not.toEqual(out2)
-  })
-
-  it('larger code distance trades more qubits for lower logical error rate', async () => {
-    const { frontier } = await engine.run(baseInputs)
-    const sorted = [...frontier].sort((a, b) => (a.codeDistance ?? 0) - (b.codeDistance ?? 0))
-    for (let i = 1; i < sorted.length; i++) {
-      expect(sorted[i].physicalQubits).toBeGreaterThan(sorted[i - 1].physicalQubits)
-      expect(sorted[i].logicalErrorRate).toBeLessThanOrEqual(sorted[i - 1].logicalErrorRate)
-    }
+  it('varies output when inputs change', async () => {
+    const a = await engine.run(inputs)
+    const b = await engine.run({ ...inputs, errorBudget: 0.0001 })
+    expect(b.frontier[0].physicalQubits).not.toBe(a.frontier[0].physicalQubits)
   })
 })

@@ -84,7 +84,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       architectureModel: draft.architectureModel,
       errorCorrection: draft.errorCorrection,
       errorBudget: draft.errorBudget,
-      qreVersion: engine?.qdkVersion ? `qdk-${engine.qdkVersion}` : 'mock-1.0'
+      qreVersion: engine?.qdkVersion ? `qdk-${engine.qdkVersion}` : 'unknown'
     }
     const run = await window.api.runQre(inputs, name)
     await get().refreshRuns()

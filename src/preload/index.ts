@@ -12,9 +12,7 @@ const api: RendererApi = {
   compareRuns: (runIds) => ipcRenderer.invoke(Channels.compareRuns, runIds),
   exportRun: (runId) => ipcRenderer.invoke(Channels.exportRun, runId),
   exportComparison: (runIds) => ipcRenderer.invoke(Channels.exportComparison, runIds),
-  getEngineStatus: () => ipcRenderer.invoke(Channels.getEngineStatus),
-  getVersions: () => ipcRenderer.invoke(Channels.getVersions),
-  setActiveVersion: (version) => ipcRenderer.invoke(Channels.setActiveVersion, version)
+  getEngineStatus: () => ipcRenderer.invoke(Channels.getEngineStatus)
 }
 
 contextBridge.exposeInMainWorld('api', api)

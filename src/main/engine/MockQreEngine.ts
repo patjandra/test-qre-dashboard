@@ -1,7 +1,7 @@
 import type { RunInputs, RunOutputs, FrontierPoint } from '../../shared/types'
 import { type QreEngine, chooseFrontierIndex } from './QreEngine'
 
-const MOCK_VERSION = 'mock-1.0'
+export const MOCK_VERSION = 'mock-1.0'
 
 /** Small deterministic string hash (FNV-1a) so identical inputs yield identical outputs. */
 function hash(s: string): number {
@@ -14,13 +14,14 @@ function hash(s: string): number {
 }
 
 /**
- * Deterministic stand-in for the real estimator. Produces a plausible Pareto
- * frontier (qubits vs. runtime trade-off across code distances) derived purely
- * from the run inputs, so the full app works offline and tests are stable.
+ * Deterministic stand-in for the real estimator, used ONLY when the app is
+ * launched in demo mode (QRE_MOCK=1). It never activates as a silent fallback —
+ * see engine/index.ts. It produces a plausible multi-point Pareto frontier
+ * (qubits vs. runtime across code distances) derived purely from the run inputs,
+ * so the whole UI — metrics, frontier chart, history, comparison, export — can be
+ * exercised end-to-end without a real QRE engine installed.
  */
 export class MockQreEngine implements QreEngine {
-  readonly kind = 'mock' as const
-
   version(): string {
     return MOCK_VERSION
   }
@@ -41,8 +42,7 @@ export class MockQreEngine implements QreEngine {
     const baseLogicalQubits = 50 + (seed % 200)
     const baseTStates = 1_000 + (seed % 50_000)
     const cycleNs =
-      (input.architectureModel.gateTimeNs * 2 +
-        input.architectureModel.measurementTimeNs) *
+      (input.architectureModel.gateTimeNs * 2 + input.architectureModel.measurementTimeNs) *
       (input.errorCorrection.qec === 'SurfaceCodeLowMove' ? 0.85 : 1)
 
     const frontier: FrontierPoint[] = []
@@ -50,9 +50,7 @@ export class MockQreEngine implements QreEngine {
     // more physical qubits but lower logical error rate (and slightly more runtime).
     for (let d = 7; d <= 21; d += 2) {
       const physicalPerLogical = 2 * d * d
-      const physicalQubits = Math.round(
-        baseLogicalQubits * physicalPerLogical * tightness
-      )
+      const physicalQubits = Math.round(baseLogicalQubits * physicalPerLogical * tightness)
       const logicalCycleTimeNs = cycleNs * d
       const runtimeNs = Math.round(logicalCycleTimeNs * baseTStates * 1.5)
       const logicalErrorRate = Number(

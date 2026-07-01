@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { app, shell, BrowserWindow } from 'electron'
 import { getDb } from './db/sqlite'
-import { initEngine } from './engine'
+import { initEngine, disposeEngine } from './engine'
 import { syncBenchmarks } from './benchmarks/loader'
 import { registerIpc } from './ipc'
 
@@ -51,4 +51,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  disposeEngine()
 })

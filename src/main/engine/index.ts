@@ -2,10 +2,9 @@ import { join } from 'path'
 import { app } from 'electron'
 import type { EngineStatus } from '../../shared/types'
 import type { QreEngine } from './QreEngine'
-import { MockQreEngine } from './MockQreEngine'
 import { PythonQreEngine } from './PythonQreEngine'
 import { probePython } from './detect'
-import { upsertVersion, getActiveVersion, setActiveVersion } from '../db/versions'
+import { MockQreEngine } from './MockQreEngine'
 
 let engine: QreEngine | null = null
 let status: EngineStatus | null = null
@@ -18,9 +17,24 @@ function workerPath(): string {
 }
 
 /**
- * Python interpreters to try before the bare `python3`/`python` on PATH:
- * an explicit QRE_PYTHON override, then a project-local virtual environment.
- * This lets `pip install "qdk[qre]"` into a venv be picked up automatically.
+ * Path to the Python interpreter bundled inside a packaged build. Provisioned at
+ * build time by scripts/provision-python.mjs and shipped via electron-builder's
+ * extraResources as `<resources>/python-runtime`. Empty string in dev (not packaged).
+ */
+function bundledPython(): string {
+  if (!app.isPackaged) return ''
+  const root = join(process.resourcesPath, 'python-runtime')
+  return process.platform === 'win32'
+    ? join(root, 'python.exe')
+    : join(root, 'bin', 'python3')
+}
+
+/**
+ * Python interpreters to try, most-preferred first:
+ *   1. the interpreter bundled in the packaged app (so a download "just works"),
+ *   2. an explicit QRE_PYTHON override,
+ *   3. a project-local virtual environment (dev convenience).
+ * Detection then falls back to `python3`/`python` on PATH (see detect.ts).
  */
 function pythonCandidates(): string[] {
   const base = app.getAppPath()
@@ -28,49 +42,73 @@ function pythonCandidates(): string[] {
     process.platform === 'win32'
       ? join(base, '.venv', 'Scripts', 'python.exe')
       : join(base, '.venv', 'bin', 'python')
-  return [process.env.QRE_PYTHON ?? '', venv]
+  return [bundledPython(), process.env.QRE_PYTHON ?? '', venv]
+}
+
+/** Demo mode: opt-in via QRE_MOCK so the UI can be exercised without qdk. */
+function mockRequested(): boolean {
+  const v = process.env.QRE_MOCK
+  return v === '1' || v === 'true'
 }
 
 /**
- * Detects available engines once and selects the default: real Python (qdk.qre)
- * when available, otherwise the deterministic mock. Records the version in the db.
+ * Selects the engine once. Normally the app runs exclusively against the real
+ * qdk.qre Python module: when it's available we build the engine and record its
+ * version; when it isn't, the engine stays unavailable and runs fail with an
+ * actionable error (see getEngine) rather than silently producing fake numbers.
+ *
+ * The one exception is an explicit demo mode (QRE_MOCK=1), which forces the
+ * deterministic MockQreEngine so the UI can be shown end-to-end with synthetic
+ * data. It is never a silent fallback — it only activates when asked for.
  */
 export function initEngine(): EngineStatus {
-  if (status && engine) return status
+  if (status) return status
+
+  if (mockRequested()) {
+    engine = new MockQreEngine()
+    status = {
+      available: true,
+      mock: true,
+      qdkVersion: engine.version(),
+      detail: 'Demo mode (QRE_MOCK): synthetic data for UI testing — not real estimates.'
+    }
+    return status
+  }
 
   const probe = probePython(pythonCandidates())
-  const mock = new MockQreEngine()
 
   if (probe.available && probe.python && probe.qdkVersion) {
     const py = new PythonQreEngine(probe.python, workerPath(), probe.qdkVersion)
     engine = py
     status = {
-      active: 'python',
-      pythonAvailable: true,
+      available: true,
       qdkVersion: probe.qdkVersion,
       detail: probe.detail
     }
-    registerVersion(py.version())
   } else {
-    engine = mock
+    engine = null
     status = {
-      active: 'mock',
-      pythonAvailable: false,
+      available: false,
       detail: probe.detail
     }
-    registerVersion(mock.version())
   }
   return status
 }
 
-function registerVersion(version: string): void {
-  upsertVersion({ version, path: workerPath(), active: false })
-  if (!getActiveVersion()) setActiveVersion(version)
+export function getEngine(): QreEngine {
+  if (!status) initEngine()
+  if (!engine) {
+    throw new Error(
+      'The real QRE engine (qdk.qre) is not available on this machine, so no run can be executed. ' +
+        'Install it and restart: pip install --upgrade "qdk[qre]"'
+    )
+  }
+  return engine
 }
 
-export function getEngine(): QreEngine {
-  if (!engine) initEngine()
-  return engine!
+/** Tears down any warm worker process held by the active engine (call on quit). */
+export function disposeEngine(): void {
+  ;(engine as { dispose?: () => void } | null)?.dispose?.()
 }
 
 export function getEngineStatus(): EngineStatus {

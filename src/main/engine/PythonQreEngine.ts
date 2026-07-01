@@ -1,18 +1,33 @@
-import { spawn } from 'child_process'
+import { spawn, type ChildProcess } from 'child_process'
 import type { RunInputs, RunOutputs, FrontierPoint } from '../../shared/types'
 import { type QreEngine, chooseFrontierIndex } from './QreEngine'
 
-interface WorkerResult {
-  version: string
-  frontier: FrontierPoint[]
+interface WorkerResponse {
+  ok: boolean
+  version?: string
+  frontier?: FrontierPoint[]
+  error?: string
+}
+
+interface Pending {
+  resolve: (out: RunOutputs) => void
+  reject: (err: Error) => void
 }
 
 /**
- * Real engine: spawns a bundled Python worker that drives the qdk.qre module.
- * The worker reads a JSON config on stdin and prints a JSON frontier on stdout.
+ * Real engine: drives the qdk.qre module through a bundled Python worker.
+ *
+ * The worker is long-lived (importing qdk costs ~2.7s, so we pay it once): we
+ * spawn it on first use and keep it warm, exchanging newline-delimited JSON —
+ * one request line in, one response line out. Requests are answered in FIFO
+ * order, matched to a queue of pending promises. If the process dies, all
+ * pending requests reject and the next run respawns it.
  */
 export class PythonQreEngine implements QreEngine {
-  readonly kind = 'python' as const
+  private proc: ChildProcess | null = null
+  private buffer = ''
+  private stderr = ''
+  private readonly queue: Pending[] = []
 
   constructor(
     private readonly python: string,
@@ -35,31 +50,77 @@ export class PythonQreEngine implements QreEngine {
     }
 
     return new Promise<RunOutputs>((resolve, reject) => {
-      const proc = spawn(this.python, [this.workerPath], {
-        stdio: ['pipe', 'pipe', 'pipe']
-      })
-      let stdout = ''
-      let stderr = ''
-      proc.stdout.on('data', (d) => (stdout += d.toString()))
-      proc.stderr.on('data', (d) => (stderr += d.toString()))
-      proc.on('error', (err) => reject(err))
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(stderr.trim() || `QRE worker exited with code ${code}`))
-          return
-        }
-        try {
-          const parsed = JSON.parse(stdout) as WorkerResult
-          resolve({
-            frontier: parsed.frontier,
-            chosenIndex: chooseFrontierIndex(parsed.frontier)
-          })
-        } catch (e) {
-          reject(new Error(`Failed to parse QRE worker output: ${(e as Error).message}`))
-        }
-      })
-      proc.stdin.write(JSON.stringify(payload))
-      proc.stdin.end()
+      const proc = this.ensureProc()
+      if (!proc.stdin) {
+        reject(new Error('QRE worker stdin unavailable'))
+        return
+      }
+      this.queue.push({ resolve, reject })
+      proc.stdin.write(JSON.stringify(payload) + '\n')
     })
+  }
+
+  /** Spawns the worker if it isn't already running, wiring up its streams. */
+  private ensureProc(): ChildProcess {
+    if (this.proc) return this.proc
+
+    const proc = spawn(this.python, [this.workerPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+    this.proc = proc
+    this.buffer = ''
+    this.stderr = ''
+
+    proc.stdout?.on('data', (d) => this.onStdout(d.toString()))
+    proc.stderr?.on('data', (d) => {
+      this.stderr += d.toString()
+    })
+    proc.on('error', (err) => {
+      this.proc = null
+      this.failAll(err)
+    })
+    proc.on('close', (code) => {
+      const err = new Error(this.stderr.trim() || `QRE worker exited with code ${code}`)
+      this.proc = null
+      this.failAll(err)
+    })
+    return proc
+  }
+
+  /** Parses complete NDJSON lines from stdout and resolves them in FIFO order. */
+  private onStdout(chunk: string): void {
+    this.buffer += chunk
+    let nl: number
+    while ((nl = this.buffer.indexOf('\n')) >= 0) {
+      const line = this.buffer.slice(0, nl).trim()
+      this.buffer = this.buffer.slice(nl + 1)
+      if (!line) continue
+      const pending = this.queue.shift()
+      if (!pending) continue
+      try {
+        const resp = JSON.parse(line) as WorkerResponse
+        if (resp.ok && resp.frontier) {
+          pending.resolve({
+            frontier: resp.frontier,
+            chosenIndex: chooseFrontierIndex(resp.frontier)
+          })
+        } else {
+          pending.reject(new Error(resp.error || 'QRE worker reported an error'))
+        }
+      } catch (e) {
+        pending.reject(new Error(`Failed to parse QRE worker output: ${(e as Error).message}`))
+      }
+    }
+  }
+
+  private failAll(err: Error): void {
+    const pendings = this.queue.splice(0, this.queue.length)
+    for (const p of pendings) p.reject(err)
+  }
+
+  /** Terminates the warm worker (called on app shutdown). */
+  dispose(): void {
+    if (!this.proc) return
+    this.proc.stdin?.end()
+    this.proc.kill()
+    this.proc = null
   }
 }

@@ -6,10 +6,23 @@ import type { RunInputs } from '../shared/types'
 import { defaultRunName } from '../shared/naming'
 import { createRun, getRuns, getRun, deleteRun } from './db/runs'
 import { getBenchmarks, getBenchmark } from './db/benchmarks'
-import { getVersions, setActiveVersion } from './db/versions'
 import { getEngine, getEngineStatus } from './engine'
 import { compareRuns } from './compare'
 import { exportRunToMarkdown, exportComparisonToMarkdown } from './export/markdown'
+import { validateCircuitFile } from './security/circuitFile'
+
+/**
+ * Validates the circuit file referenced by a run's inputs before it is handed to
+ * the engine (which reads and evaluates it). Throws with a clear message on
+ * rejection. Defense-in-depth: import is already validated, but this also guards
+ * tampered IPC payloads, duplicated runs, and files swapped after import.
+ */
+function assertCircuitSafe(inputs: RunInputs): void {
+  const verdict = validateCircuitFile(inputs.applicationPath, inputs.applicationLang)
+  if (!verdict.ok) {
+    throw new Error(`Circuit file rejected by validation: ${verdict.reason}`)
+  }
+}
 
 /** Resolves a benchmark id to its display name for Markdown reports. */
 const benchmarkNameOf = (id: string): string | undefined => getBenchmark(id)?.name
@@ -35,6 +48,7 @@ function resolveRunName(inputs: RunInputs, name?: string): string {
 export function registerIpc(): void {
   ipcMain.handle(Channels.runQre, async (_e, raw: RunInputs, name?: string) => {
     const inputs = runInputsSchema.parse(raw)
+    assertCircuitSafe(inputs)
     const engine = getEngine()
     // Stamp the run with the engine's actual version for reproducibility.
     const stamped: RunInputs = { ...inputs, qreVersion: engine.version() }
@@ -54,6 +68,7 @@ export function registerIpc(): void {
     if (!original) return null
     const engine = getEngine()
     const inputs: RunInputs = { ...original.inputs, qreVersion: engine.version() }
+    assertCircuitSafe(inputs)
     const outputs = await engine.run(inputs)
     return createRun(inputs, outputs, `${original.name} (copy)`)
   })
@@ -71,7 +86,14 @@ export function registerIpc(): void {
       ]
     })
     if (result.canceled || result.filePaths.length === 0) return { canceled: true }
-    return { canceled: false, path: result.filePaths[0] }
+
+    // Validate the uploaded file before it is ever accepted into a run.
+    const filePath = result.filePaths[0]
+    const verdict = validateCircuitFile(filePath, 'qsharp')
+    if (!verdict.ok) {
+      return { canceled: false, error: verdict.reason }
+    }
+    return { canceled: false, path: filePath }
   })
 
   ipcMain.handle(Channels.compareRuns, (_e, runIds: string[]) => {
@@ -100,10 +122,6 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle(Channels.getEngineStatus, () => getEngineStatus())
-  ipcMain.handle(Channels.getVersions, () => getVersions())
-  ipcMain.handle(Channels.setActiveVersion, (_e, version: string) => {
-    setActiveVersion(version)
-  })
 }
 
 async function saveMarkdown(

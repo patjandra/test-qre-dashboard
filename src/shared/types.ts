@@ -75,22 +75,14 @@ export interface Benchmark {
   metadata: Record<string, unknown>
 }
 
-export interface QreVersion {
-  version: string
-  path: string
-  active: boolean
-}
-
-export type EngineKind = 'python' | 'mock'
-
 export interface EngineStatus {
-  /** Engine actually selected as the default. */
-  active: EngineKind
-  /** Whether the real Python (qdk.qre) engine is available on this machine. */
-  pythonAvailable: boolean
+  /** Whether a runnable engine (real qdk.qre, or the demo mock) is available. */
+  available: boolean
+  /** True when the deterministic demo engine is active (QRE_MOCK=1) — not real. */
+  mock?: boolean
   /** Detected qdk version string, when available. */
   qdkVersion?: string
-  /** Human-readable note, e.g. why the mock fallback is in use. */
+  /** Human-readable note, e.g. how to enable the engine when unavailable. */
   detail: string
 }
 

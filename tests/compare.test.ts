@@ -16,14 +16,14 @@ function makeRun(id: string, physicalQubits: number, runtimeNs: number): Run {
     id,
     name: `run-${id}`,
     timestamp: 0,
-    qreVersion: 'mock-1.0',
+    qreVersion: 'qdk-1.29.1',
     inputs: {
       applicationPath: '/x.qs',
       applicationLang: 'qsharp',
       architectureModel: { kind: 'GateBased', errorRate: 1e-4, gateTimeNs: 100, measurementTimeNs: 500 },
       errorCorrection: { qec: 'SurfaceCode', factory: 'RoundBasedFactory' },
       errorBudget: 0.01,
-      qreVersion: 'mock-1.0'
+      qreVersion: 'qdk-1.29.1'
     },
     outputs: { frontier: [point], chosenIndex: 0 }
   }

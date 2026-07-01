@@ -39,7 +39,7 @@ export function probePython(extraCandidates: string[] = []): PythonProbe {
   return {
     available: false,
     detail:
-      'Python with qdk.qre not found. Falling back to the deterministic mock engine. ' +
-      'Install with: pip install --upgrade "qdk[qre]"'
+      'Real QRE engine unavailable: Python with qdk.qre was not found. ' +
+      'Install it and restart: pip install --upgrade "qdk[qre]"'
   }
 }

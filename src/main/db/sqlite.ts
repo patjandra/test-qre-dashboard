@@ -40,12 +40,6 @@ function migrate(d: Database.Database): void {
       lang TEXT NOT NULL,
       metadata TEXT NOT NULL
     );
-
-    CREATE TABLE IF NOT EXISTS versions (
-      version TEXT PRIMARY KEY,
-      path TEXT NOT NULL,
-      active INTEGER NOT NULL DEFAULT 0
-    );
   `)
 
   // Add columns introduced after the initial schema, for pre-existing databases.

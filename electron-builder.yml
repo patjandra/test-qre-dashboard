@@ -1,0 +1,41 @@
+appId: org.plextech.qre-desktop
+productName: QRE Desktop
+copyright: Copyright © 2026 PlexTech
+
+# electron-vite emits the compiled app into out/. asar-pack it; native modules and
+# the bundled Python runtime are shipped unpacked via extraResources below.
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+# Anything here lands in <app>/Contents/Resources (mac) or resources\ (win):
+#   - the Q# benchmarks + Python worker script the engine reads at runtime
+#   - the self-contained Python interpreter with qdk[qre] (see scripts/provision-python.mjs)
+extraResources:
+  - from: resources
+    to: resources
+  - from: build/python-runtime
+    to: python-runtime
+
+# better-sqlite3 is a native module; keep it unpacked so its .node binary loads.
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,12 +1,5 @@
 // IPC channel names and the typed API contract exposed on window.api.
-import type {
-  Run,
-  RunInputs,
-  Benchmark,
-  QreVersion,
-  EngineStatus,
-  ComparisonResult
-} from './types'
+import type { Run, RunInputs, Benchmark, EngineStatus, ComparisonResult } from './types'
 
 export const Channels = {
   runQre: 'run-qre',
@@ -19,9 +12,7 @@ export const Channels = {
   compareRuns: 'compare-runs',
   exportRun: 'export-run',
   exportComparison: 'export-comparison',
-  getEngineStatus: 'get-engine-status',
-  getVersions: 'get-versions',
-  setActiveVersion: 'set-active-version'
+  getEngineStatus: 'get-engine-status'
 } as const
 
 export interface ExportResult {
@@ -32,6 +23,8 @@ export interface ExportResult {
 export interface ImportResult {
   canceled: boolean
   path?: string
+  /** Set when a file was chosen but rejected by circuit-file validation. */
+  error?: string
 }
 
 /** Shape of window.api injected by the preload script. */
@@ -47,6 +40,4 @@ export interface RendererApi {
   exportRun(runId: string): Promise<ExportResult>
   exportComparison(runIds: string[]): Promise<ExportResult>
   getEngineStatus(): Promise<EngineStatus>
-  getVersions(): Promise<QreVersion[]>
-  setActiveVersion(version: string): Promise<void>
 }

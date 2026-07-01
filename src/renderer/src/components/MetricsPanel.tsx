@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FrontierPoint } from '@shared/types'
 import { PRIMARY_METRICS } from '@shared/types'
 import { fmtNum } from '../format'
+import FrontierChart from './FrontierChart'
 
 interface Props {
   frontier: FrontierPoint[]
@@ -59,7 +60,14 @@ export default function MetricsPanel({ frontier, chosenIndex }: Props): JSX.Elem
         })}
       </div>
 
-      <h3 style={{ marginTop: 20 }}>Pareto frontier ({frontier.length} points)</h3>
+      <h3 style={{ marginTop: 20 }}>Trade-off curve (Pareto frontier)</h3>
+      <p className="muted" style={{ marginTop: -4 }}>
+        Each point is an optimal physical-qubits vs. runtime trade-off. The ★ marks the
+        representative point shown above.
+      </p>
+      <FrontierChart frontier={frontier} chosenIndex={chosenIndex} />
+
+      <h3 style={{ marginTop: 20 }}>Frontier points ({frontier.length})</h3>
       <table>
         <thead>
           <tr>

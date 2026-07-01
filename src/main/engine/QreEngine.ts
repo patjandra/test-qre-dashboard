@@ -1,11 +1,11 @@
-import type { RunInputs, RunOutputs, EngineKind } from '../../shared/types'
+import type { RunInputs, RunOutputs } from '../../shared/types'
 
 /**
- * Abstraction over a QRE execution backend. Implementations must be pluggable so
- * the app can run against the real qdk.qre Python module or a deterministic mock.
+ * Abstraction over the QRE execution backend (the real qdk.qre Python module,
+ * driven by PythonQreEngine). Kept as an interface so the worker transport can
+ * evolve without touching callers.
  */
 export interface QreEngine {
-  readonly kind: EngineKind
   /** Version string reported for runs executed by this engine. */
   version(): string
   /** Executes an estimation and returns the normalized Pareto frontier. */
